@@ -7,7 +7,7 @@ const sendBtn = document.getElementById("sendBtn");
 // GitHub Pages needs the URL of a deployed Cloudflare Worker, e.g.
 // https://your-worker.your-account.workers.dev
 // Leave blank only when using a Cloudflare Pages site with /api/chat.
-const workerUrl = "";
+const workerUrl = "https://08-prj-loreal-chatbot.hq3717.workers.dev";
 
 const conversation = [];
 chatWindow.replaceChildren();
