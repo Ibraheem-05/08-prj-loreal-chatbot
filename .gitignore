@@ -1,2 +1,6 @@
-# Secrets file containing API keys
+# Never commit API credentials
 secrets.js
+.dev.vars*
+.env*
+node_modules/
+.wrangler/
