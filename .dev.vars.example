@@ -1,0 +1,3 @@
+# Copy this to .dev.vars and replace the placeholder with a NEW API key.
+# Never commit .dev.vars or paste the key into script.js.
+OPENAI_API_KEY="YOUR_NEW_OPENAI_API_KEY"
