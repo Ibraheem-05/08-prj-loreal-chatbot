@@ -68,12 +68,26 @@ export default {
       });
 
       if (!response.ok) {
-        // Do not expose key details or raw provider responses to site visitors.
+        // Only disclose the provider's safe error classification, never raw details.
+        const provider = await response.json().catch(() => ({}));
+        const code = provider?.error?.code;
+        const type = provider?.error?.type;
+
         if (response.status === 401 || response.status === 403)
-          return json({ error: "The configured OpenAI key is invalid or lacks access." }, 502);
-        if (response.status === 429)
-          return json({ error: "OpenAI quota or rate limit reached. Check API billing and limits." }, 503);
-        return json({ error: "OpenAI could not complete this request." }, 502);
+          return json({ error: "OpenAI API key invalid or lacks permission.", diagnostic: "authentication" }, 502);
+
+        if (response.status === 429) {
+          const noCredits = code === "insufficient_quota" || type === "insufficient_quota";
+          return json({
+            error: noCredits
+              ? "OpenAI API credits or project budget exhausted. Check API billing and project limits."
+              : "OpenAI API rate limit reached. Try again later or check project rate limits.",
+            diagnostic: noCredits ? "insufficient_quota" : "rate_limit"
+          }, 503);
+        }
+        if (response.status === 400 && (code === "model_not_found" || code === "invalid_request_error"))
+          return json({ error: "OpenAI model/request configuration needs attention.", diagnostic: "model_or_request" }, 502);
+        return json({ error: "OpenAI service could not complete the request.", diagnostic: "provider_error" }, 502);
       }
 
       const data = await response.json();
