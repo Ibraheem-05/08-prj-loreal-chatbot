@@ -4,6 +4,11 @@ const userInput = document.getElementById("userInput");
 const chatWindow = document.getElementById("chatWindow");
 const sendBtn = document.getElementById("sendBtn");
 
+// GitHub Pages needs the URL of a deployed Cloudflare Worker, e.g.
+// https://your-worker.your-account.workers.dev
+// Leave blank only when using a Cloudflare Pages site with /api/chat.
+const workerUrl = "";
+
 const conversation = [];
 chatWindow.replaceChildren();
 
@@ -42,7 +47,11 @@ chatForm.addEventListener("submit", async (event) => {
   const waiting = addMessage("ai", "Thinking…");
 
   try {
-    const response = await fetch("/api/chat", {
+    if (location.hostname.endsWith(".github.io") && !workerUrl) {
+      throw new Error("Cloudflare Worker URL is not configured. Deploy RESOURCE_cloudflare-worker.js and paste the workers.dev URL into workerUrl in script.js.");
+    }
+    const endpoint = workerUrl.trim() || "/api/chat";
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: conversation.slice(-10) }),
@@ -52,13 +61,16 @@ chatForm.addEventListener("submit", async (event) => {
     if (!response.ok) {
       throw new Error(data.error || "The chat service could not respond.");
     }
-    if (typeof data.reply !== "string" || !data.reply.trim()) {
-      throw new Error("The chat service returned an empty reply.");
+    // Cloudflare Workers (assignment starter) return choices[0].message.content;
+    // our optional Cloudflare Pages Function returns { reply }.
+    const reply = data.reply ?? data.choices?.[0]?.message?.content;
+    if (typeof reply !== "string" || !reply.trim()) {
+      throw new Error(data.error?.message || data.error || "The chat service returned an empty reply.");
     }
 
     waiting.remove();
-    addMessage("ai", data.reply);
-    conversation.push({ role: "assistant", content: data.reply });
+    addMessage("ai", reply);
+    conversation.push({ role: "assistant", content: reply });
   } catch (error) {
     waiting.remove();
     conversation.pop(); // Permit retrying a failed message.
