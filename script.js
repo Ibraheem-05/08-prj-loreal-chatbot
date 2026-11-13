@@ -1,83 +1,102 @@
-// Browser-side chat UI. The OpenAI key stays on the server.
+// L'Oréal student chatbot. Never place an API key in this browser file.
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 const chatWindow = document.getElementById("chatWindow");
 const sendBtn = document.getElementById("sendBtn");
+const clearBtn = document.getElementById("clearBtn");
+const latestExchange = document.getElementById("latestExchange");
+const latestQuestion = document.getElementById("latestQuestion");
+const latestAnswer = document.getElementById("latestAnswer");
 
-// GitHub Pages needs the URL of a deployed Cloudflare Worker, e.g.
-// https://your-worker.your-account.workers.dev
-// Leave blank only when using a Cloudflare Pages site with /api/chat.
+// Worker handles the OpenAI secret and forwards chat requests securely.
 const workerUrl = "https://08-prj-loreal-chatbot.hq3717.workers.dev";
-
-const conversation = [];
-chatWindow.replaceChildren();
+const conversation = []; // LevelUp: preserve context across questions.
+let busy = false;
 
 function addMessage(role, content) {
   const message = document.createElement("div");
   message.className = "msg " + role;
 
-  const label = document.createElement("strong");
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  const label = document.createElement("span");
   label.className = "msg-label";
-  label.textContent = role === "user" ? "You: " : role === "error" ? "Error: " : "Advisor: ";
-
+  label.textContent = role === "user" ? "You" : role === "error" ? "Connection error" : "Beauty Advisor";
   const body = document.createElement("span");
-  body.textContent = content; // Never interpret model/user text as HTML.
+  body.className = "msg-body";
+  body.textContent = content; // textContent avoids injecting user/model HTML.
 
-  message.append(label, body);
+  bubble.append(label, body);
+  message.appendChild(bubble);
   chatWindow.appendChild(message);
   chatWindow.scrollTop = chatWindow.scrollHeight;
   return message;
 }
 
-addMessage("ai", "Hi! Ask me about skincare, makeup, haircare, fragrances, or beauty routines.");
+function resetChat() {
+  conversation.length = 0;
+  chatWindow.replaceChildren();
+  latestExchange.hidden = true;
+  latestQuestion.textContent = "";
+  latestAnswer.textContent = "";
+  addMessage("ai", "Hello! Ask me about L'Oréal skincare, haircare, makeup, fragrances, or beauty routines.");
+}
+
+function setBusy(value) {
+  busy = value;
+  userInput.disabled = value;
+  sendBtn.disabled = value;
+  clearBtn.disabled = value;
+  sendBtn.textContent = value ? "…" : "Send";
+}
+
+clearBtn.addEventListener("click", resetChat);
+resetChat();
 
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const prompt = userInput.value.trim();
+  if (!prompt || busy) return;
 
-  if (!prompt || sendBtn.disabled) return;
+  // LevelUp: show latest user question directly above this answer, reset each turn.
+  latestExchange.hidden = false;
+  latestQuestion.textContent = prompt;
+  latestAnswer.textContent = "Thinking…";
 
-  const userMessage = { role: "user", content: prompt };
-  conversation.push(userMessage);
+  conversation.push({ role: "user", content: prompt });
   addMessage("user", prompt);
-
   userInput.value = "";
-  userInput.disabled = true;
-  sendBtn.disabled = true;
+  setBusy(true);
   const waiting = addMessage("ai", "Thinking…");
 
   try {
-    if (location.hostname.endsWith(".github.io") && !workerUrl) {
-      throw new Error("Cloudflare Worker URL is not configured. Deploy RESOURCE_cloudflare-worker.js and paste the workers.dev URL into workerUrl in script.js.");
-    }
-    const endpoint = workerUrl.trim() || "/api/chat";
-    const response = await fetch(endpoint, {
+    const response = await fetch(workerUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: conversation.slice(-10) }),
     });
-
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || "The chat service could not respond.");
+      const details = typeof data.error === "string" ? data.error : data.error?.message;
+      throw new Error(details || "The chatbot could not reach the AI service.");
     }
-    // Cloudflare Workers (assignment starter) return choices[0].message.content;
-    // our optional Cloudflare Pages Function returns { reply }.
     const reply = data.reply ?? data.choices?.[0]?.message?.content;
     if (typeof reply !== "string" || !reply.trim()) {
-      throw new Error(data.error?.message || data.error || "The chat service returned an empty reply.");
+      throw new Error("No chatbot reply was returned. Please try again.");
     }
 
     waiting.remove();
     addMessage("ai", reply);
+    latestAnswer.textContent = reply;
     conversation.push({ role: "assistant", content: reply });
   } catch (error) {
     waiting.remove();
-    conversation.pop(); // Permit retrying a failed message.
-    addMessage("error", error.message || "Something went wrong.");
+    conversation.pop(); // Failed messages should not pollute the next request.
+    const details = error instanceof Error ? error.message : "Unable to connect.";
+    addMessage("error", details);
+    latestAnswer.textContent = details;
   } finally {
-    userInput.disabled = false;
-    sendBtn.disabled = false;
+    setBusy(false);
     userInput.focus();
   }
 });
