@@ -49,3 +49,20 @@ Successful response: `{ "reply": "..." }`. Failures return a JSON `error` and an
 - OpenAI API billing is separate from ChatGPT subscriptions. Before sharing this demo publicly, set project spend controls and Cloudflare rate-limiting/WAF rules to reduce abuse.
 
 Keep API secrets out of the browser, Git commits, screenshots and logs.
+
+
+## GitHub Pages + standalone Cloudflare Worker (assignment route)
+
+For a site served at `https://<username>.github.io/<repository>/`, GitHub Pages cannot execute `/api/chat` itself. Use the separate Worker provided in `RESOURCE_cloudflare-worker.js`:
+
+1. In Cloudflare **Workers & Pages**, create or select a **Worker** (not a static Pages project).
+2. Paste the contents of `RESOURCE_cloudflare-worker.js` into its code editor and **Deploy**.
+3. Under that Worker's **Settings > Variables and Secrets**, add an encrypted **Secret** with name `OPENAI_API_KEY`. Use a newly generated key, not one previously shared in chat.
+4. Copy the Worker's real `https://....workers.dev` URL from Cloudflare.
+5. In `script.js` set `const workerUrl = "https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev";` and commit that URL (never the secret key).
+6. Refresh the GitHub Pages deployment and test a chatbot message. A browser GET request to the Worker URL will show a JSON 'Use POST' message, which confirms you reached the Worker; an actual chat POST should return a reply.
+7. Configure rate limiting and an origin restriction before advertising a public demo to limit abuse and API costs.
+
+The frontend can alternatively use the same-origin `/api/chat` endpoint when hosted on Cloudflare Pages. In that case leave `workerUrl` empty and configure the Pages project's own `OPENAI_API_KEY` secret.
+
+A local `secrets.js` may be used as a temporary key note per the project handout, but is gitignored and must never be included in browser HTML. It is **not** how the deployed Worker reads a key.
